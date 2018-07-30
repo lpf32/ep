@@ -30,7 +30,7 @@ ifeq ("$(WITH_RACE)", "1")
 	CGO_ENABLED=1 go build -race -ldflags '$(LDFLAGS)' -o bin/ep-server cmd/ep-server/main.go
 else
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o bin/ep-server cmd/ep-server/main.go
-# endif
+endif
 #	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o bin/ep-ctl cmd/ep-ctl/main.go
 
 test:

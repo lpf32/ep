@@ -26,3 +26,10 @@ func ListEtcdMembers(client *clientv3.Client) (*clientv3.MemberListResponse, err
 	cancel()
 	return listResp, errors.Trace(err)
 }
+
+func AddEtcdMember(client *clientv3.Client, urls []string) (*clientv3.MemberAddResponse, error) {
+	ctx, cancel := context.WithTimeout(client.Ctx(), DefaultRequestTimeout)
+	addResp, err := client.MemberAdd(ctx, urls)
+	cancel()
+	return addResp, errors.Trace(err)
+}

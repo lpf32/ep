@@ -5,8 +5,10 @@ import (
 	"github.com/coreos/etcd/embed"
 	"time"
 
+	"crypto/tls"
 	"fmt"
 	"github.com/BurntSushi/toml"
+	"github.com/coreos/etcd/pkg/transport"
 	"github.com/juju/errors"
 	"github.com/panpan-zhang/ep/pkg/typeutil"
 	"net/url"
@@ -62,7 +64,7 @@ type Config struct {
 	// an election, thus minimizing disruptions.
 	PreVote bool `toml:"enable-prevote"`
 
-	//Security SecurityConfig `toml:"security" json:"security"`
+	Security SecurityConfig `toml:"security" json:"security"`
 
 	configFile string
 
@@ -93,6 +95,10 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.AdvertisePeerUrls, "advertise-peer-urls", "", "advertise url for peer traffic (default '${peer-urls}')")
 	fs.StringVar(&cfg.InitialCluster, "initial-cluster", "", "initial cluster configuration for bootstrapping, e,g. pd=http://127.0.0.1:2380")
 	fs.StringVar(&cfg.Join, "join", "", "join to an existing cluster (usage: cluster's '${advertise-client-urls}'")
+
+	fs.StringVar(&cfg.Security.CAPath, "cacert", "", "Path of file that contains list of trusted TLS CAs")
+	fs.StringVar(&cfg.Security.CertPath, "cert", "", "Path of file that contains X509 certificate in PEM format")
+	fs.StringVar(&cfg.Security.KeyPath, "key", "", "Path of file that contains X509 key in PEM format")
 
 	return cfg
 }
@@ -258,13 +264,13 @@ func (c *Config) genEmbedEtcdConfig() (*embed.Config, error) {
 	cfg.AutoCompactionRetention = c.AutoCompactionRetention
 	cfg.QuotaBackendBytes = int64(c.QuotaBackendBytes)
 
-	//cfg.ClientTLSInfo.ClientCertAuth = len(c.Security.CAPath) != 0
-	//cfg.ClientTLSInfo.TrustedCAFile = c.Security.CAPath
-	//cfg.ClientTLSInfo.CertFile = c.Security.CertPath
-	//cfg.ClientTLSInfo.KeyFile = c.Security.KeyPath
-	//cfg.PeerTLSInfo.TrustedCAFile = c.Security.CAPath
-	//cfg.PeerTLSInfo.CertFile = c.Security.CertPath
-	//cfg.PeerTLSInfo.KeyFile = c.Security.KeyPath
+	cfg.ClientTLSInfo.ClientCertAuth = len(c.Security.CAPath) != 0
+	cfg.ClientTLSInfo.TrustedCAFile = c.Security.CAPath
+	cfg.ClientTLSInfo.CertFile = c.Security.CertPath
+	cfg.ClientTLSInfo.KeyFile = c.Security.KeyPath
+	cfg.PeerTLSInfo.TrustedCAFile = c.Security.CAPath
+	cfg.PeerTLSInfo.CertFile = c.Security.CertPath
+	cfg.PeerTLSInfo.KeyFile = c.Security.KeyPath
 
 	var err error
 
@@ -289,4 +295,32 @@ func (c *Config) genEmbedEtcdConfig() (*embed.Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// SecurityConfig is the configuration for supporting tls.
+type SecurityConfig struct {
+	// CAPath is the path of file that contains list of trusted SSL CAs. if set, following four settings shouldn't be empty
+	CAPath string `toml:"cacert-path" json:"cacert-path"`
+	// CertPath is the path of file that contains X509 certificate in PEM format.
+	CertPath string `toml:"cert-path" json:"cert-path"`
+	// KeyPath is the path of file that contains X509 key in PEM format.
+	KeyPath string `toml:"key-path" json:"key-path"`
+}
+
+// ToTLSConfig generates tls config.
+func (s SecurityConfig) ToTLSConfig() (*tls.Config, error) {
+	if len(s.CertPath) == 0 && len(s.KeyPath) == 0 {
+		return nil, nil
+	}
+
+	tlsInfo := transport.TLSInfo{
+		CAFile:        s.CertPath,
+		KeyFile:       s.KeyPath,
+		TrustedCAFile: s.CertPath,
+	}
+	tlsConfig, err := tlsInfo.ClientConfig()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return tlsConfig, nil
 }
